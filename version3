@@ -1,0 +1,173 @@
+import sys
+import os
+import threading
+from tkinter import *
+
+import requests
+
+flag = False
+workTh = 0
+work = 0
+pag=int(input("请输入爬取的页数："))
+
+def get_url():
+    pages=20
+    url=[]
+    key = entry.get()
+ 
+    for x in range(pag):    
+        url.append('http://xueshu.baidu.com/s?wd='+key+'&pn='+str(x*10)+'&tn=SE_baiduxueshu_c1gjeupa&ie=utf-8&sc_f_para=sc_tasktype%3D%7BfirstSimpleSearch%7D&sc_hit=1')
+    return url
+
+
+headers = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
+    'Referer': 'https://googleads.g.doubleclick.net/'}
+
+
+def get_paper_link():
+    urls=[]
+    urls=get_url()    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36'}
+    # 获取网页内容
+    doi_list = []
+    for j in urls:
+        response = requests.get(j, headers=headers)
+        res1_data = response.text
+        #print(j)
+    # print(res1_data)
+    # 找论文链接
+        paper_link = re.findall(r'<h3 class=\"t c_font\">\n +\n +<a href=\"(.*)\"', res1_data)
+    # print(paper_link)
+    # 补齐链接
+          # 用一个列表接收论文的DOI
+        for link in paper_link:
+            paper_link = 'http:' + link
+            # print(paper_link)
+            response2 = requests.get(url=paper_link, headers=headers)
+            response2.encoding = 'GBK'  # 读取中文时不会出现乱码
+            res2_data = response2.text
+            # 提取论文的DOI
+            try:
+                paper_doi = re.findall(r'\'doi\'}\">\n +(.*?)\n ', res2_data)
+                if str(10) in paper_doi[0]:#过滤不是以10开头的
+                  # print(paper_doi)
+                    doi_list.append(paper_doi)
+            except:
+                pass
+    #print(doi_list)       
+    return doi_list
+
+
+def find_paper(title):
+    text.insert(END, '论文：{}，开始下载...'.format(title))
+    text.see(END)  # 文本框滚动
+    text.update()  # 更新
+
+
+def finish_paper(title):
+    text.insert(END, '论文：{}，下载成功！'.format(title))
+    text.see(END)
+    text.update()
+
+
+def error_output(title):
+    text.insert(END, '论文：{}，下载失败！'.format(title))
+    text.see(END)
+    text.update()
+
+
+def start_output(key):
+    text.insert(END, '---------')
+    text.see(END)
+    text.update()
+    text.insert(END, '开始检索：{}'.format(key))
+    text.see(END)
+    text.update()
+
+
+class Work:
+    def __init__(self):
+        self._flag = False
+
+    def run(self):
+        doi_list = get_paper_link()
+        #print(doi_list)
+        for doi in doi_list:
+            # print(doi[0])
+            try:
+                doi_link = 'https://sci.bban.top/pdf/' + doi[0] + '.pdf'
+                print(doi_link)
+                find_paper(doi_link.split('/')[-1])
+                if 'https:' not in doi_link:
+                    doi_link = 'https:' + doi_link
+                r = requests.get(url=doi_link, headers=headers)
+                r.close()
+                paperpath = entry2.get()
+                if not os.path.exists(paperpath):
+                    os.mkdir(paperpath)
+                path = paperpath + '//' + doi_link.split('/')[-1]
+                with open(path, 'wb') as f:
+                    f.write(r.content)
+                    print('下载完毕' + doi_link.split('/')[-1])
+                    finish_paper(doi_link.split('/')[-1])
+            except:
+                print("下载失败!")
+                error_output(doi_link.split('/')[-1])
+            if self._flag:
+                break
+
+    def terminate(self):
+        self._flag = True
+
+
+def button_clicked():
+    global flag
+    global workTh
+    global work
+    if flag is False:
+        flag = True
+        button1.configure(text="停止")
+        button1.configure(bg="#de6367")
+        start_output(entry.get())
+        work = Work()
+        workTh = threading.Thread(target=work.run)
+        workTh.start()
+    else:
+        flag = False
+        button1.configure(text="开始")
+        button1.configure(bg="#0dd068")
+        work.terminate()
+
+
+# paper_d=requests.get(url='https://sci-hub.tf/10.1109/5.628714',headers=headers).text
+# print(paper_d)
+# url='https://xueshu.baidu.com/s?wd=swot%E5%88%86%E6%9E%90&rsv_bp=0&tn=SE_baiduxueshu_c1gjeupa&rsv_spt=3&ie=utf-8&f=3&rsv_sug2=1&sc_f_para=sc_tasktype%3D%7BfirstSimpleSearch%7D&rsp=0'
+# doi_download()
+# print(get_paper_link(url))
+# 开发GUI页面
+# 创建画布
+root = Tk()
+root.configure()
+root.geometry()
+# bp=PhotoImage(file="C:/Users/DELL/Desktop/4.gif")
+root.title('论文爬取器')
+# 文本框
+label = Label(root, text='关键字(英文):')
+label.grid(row=0, column=0, sticky=W)
+label2 = Label(root, text='下载路径:')
+label2.grid(row=1, column=0, sticky=W)
+# 输入框
+entry = Entry(root)
+entry.grid(row=0, column=1)
+entry2 = Entry(root)
+entry2.grid(row=1, column=1)
+print(get_url())
+# 列表框
+text = Listbox(root)
+text.grid(row=2, columnspan=3, sticky=W + E + N + S)
+# 下载按钮
+button1 = Button(root, text='开始', command=button_clicked, bg="#0dd068", width=6)
+button1.grid(row=0, column=2, rowspan=2, sticky=W + E + N + S)
+root.mainloop()
